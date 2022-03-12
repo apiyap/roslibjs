@@ -24,6 +24,7 @@ function Service(options) {
   this.isAdvertised = false;
 
   this._serviceCallback = null;
+  this._serviceResponseCallback = null;
 }
 Service.prototype.__proto__ = EventEmitter2.prototype;
 /**
@@ -76,13 +77,18 @@ Service.prototype.callService = function(request, callback, failedCallback) {
  *   It should return true if the service has finished successfully,
  *   i.e. without any fatal errors.
  */
-Service.prototype.advertise = function(callback) {
+Service.prototype.advertise = function(callback, responseCallback = null) {
   if (this.isAdvertised || typeof callback !== 'function') {
     return;
   }
 
   this._serviceCallback = callback;
-  this.ros.on(this.name, this._serviceResponse.bind(this));
+  this._serviceResponseCallback = responseCallback;
+  if (typeof this._serviceResponseCallback === "function") {
+    this.ros.on(this.name, this._serviceResponseCallback);
+  } else {
+    this.ros.on(this.name, this._serviceResponse.bind(this));
+  }
   this.ros.callOnConnection({
     op: 'advertise_service',
     type: this.serviceType,
@@ -100,6 +106,22 @@ Service.prototype.unadvertise = function() {
     service: this.name
   });
   this.isAdvertised = false;
+};
+
+Service.prototype.sendResponse = function (success, response, id) {
+
+  var call = {
+    op: 'service_response',
+    service: this.name,
+    values: new ServiceResponse(response),
+    result: success
+  };
+
+  if (id) {
+    call.id = id;
+  }
+  
+  this.ros.callOnConnection(call);
 };
 
 Service.prototype._serviceResponse = function(rosbridgeRequest) {
